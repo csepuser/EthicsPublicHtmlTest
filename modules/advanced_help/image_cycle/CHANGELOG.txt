@@ -1,0 +1,12 @@
+// $Id: CHANGELOG.txt,v 1.4 2009/05/01 03:06:30 boombatower Exp $
+
+Image cycle 6.x-1.1, 2009-04-30
+-------------------------------
+- Changes
+   * Additional descriptions on the settings page.
+- Bugs:
+   * #449336: Correct parameter parsing.
+
+Image cycle 6.x-1.0, 2008-12-29
+-------------------------------
+- Initial release.

@@ -1,0 +1,43 @@
+<?php
+// $Id: image_cycle.install,v 1.2 2008/12/29 22:36:42 boombatower Exp $
+/**
+ * @file
+ * Create an image slideshow from images in a gallery using the jQuery Cycle plugin.
+ *
+ * Copyright 2008 by Jimmy Berry ("boombatower", http://drupal.org/user/214218)
+ */
+
+/**
+ * Implementation of hook_requirements().
+ */
+function image_cycle_requirements($phase) {
+  $requirements = array();
+
+  // Ensure translations don't break at install time
+  $t = get_t();
+
+  if ($phase == 'install') {
+    if (!file_exists(drupal_get_path('module', 'image_cycle') . '/jquery.cycle.js')) {
+      $requirements['image_cycle'] = array(
+        'title' => $t('jQuery Cycle plugin'),
+        'description' => $t('You must install the <a href="http://malsup.com/jquery/cycle/download.html">jQuery Cycle plugin</a>' .
+                      ' and place the file at <em>image_cycle/jquery.cycle.js</em>.'),
+        'severity' => REQUIREMENT_ERROR
+      );
+    }
+  }
+  return $requirements;
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function image_cycle_uninstall() {
+   $variables = variable_init();
+   foreach ($variables as $key => $value) {
+     if (preg_match('/image_cycle_.*/', $key)) {
+      variable_del($key);
+      drupal_set_message($key);
+     }
+   }
+}

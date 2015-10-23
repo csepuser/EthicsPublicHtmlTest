@@ -1,0 +1,507 @@
+<?php
+/**
+ * Implementation of hook_menu()
+ */
+function csep_import_menu() {
+  $items = array();
+  $items['csep_import'] = array(
+    'title' => 'Import CSEP codes',
+    'description' => 'Imports CSEP codes',
+    'page callback' => 'csep_import',     
+    'access callback' => true
+  );
+
+  $items['csep/link_codes'] = array(
+    'title' => 'Link code of ethics',
+    'description' => 'Links individual code of ethics in an organization.',
+    'page callback' => 'link_ethics_codes',     
+    'access arguments' => array("administer nodes")
+  );
+  
+  return $items;
+}
+
+/**
+ * Implementation of hook_views_query_alter()
+ */
+function csep_import_views_query_alter(&$view, &$query) {
+  //print $view->name;
+
+  if($view->name == 'custom_facet_search') {
+    $a = array();
+    $a["clauses"] = array();
+    $a["clauses"][] = $query->where[0]["clauses"][0];
+    $a["clauses"][] = $query->where[0]["clauses"][2];
+
+    $a["args"] = array();
+    $a["args"][] = $query->where[0]["args"][0];
+    $a["args"][] = $query->where[0]["args"][3];
+
+    $a["type"] = "OR";
+    $query->where[] = $a;
+
+    $query->where[0]["args"][0] = $query->where[0]["args"][3] = "";
+    //print "<pre>";print_r($query->where);print "</pre>"; 
+  }
+}
+
+
+function csep_import() {
+  //print "<pre>";print_r(node_load(2)); print "</pre>";
+
+  $html = "";
+
+/*
+  $query = "SELECT * FROM csep_test.codes_category_1";
+  $res = db_query($query);
+  while($row = db_fetch_object($res)) {
+	$html .= "<br/>".$row->description." ID: ".$row->id." TID: "._get_category_tid(strtolower($row->description));
+  }
+  */
+  
+  //$log1 = _create_organization_node();
+  //$html .= $log1;
+  
+  //$log2 = _create_individual_code_nodes();
+  //$html .= $log2;
+  
+  //$log3 = _create_unassigned_codes();
+  //$html .= $log3;
+  
+  //$log4 = _update_code_nodes();
+  //$html .= $log4;
+  
+  //$log5 = _update_code_node_markup();
+  //$html .= $log5;
+
+  //$log6 = _update_code_node_title();
+  //$html .= $log6;
+
+  return $html;
+}
+
+function link_ethics_codes() {
+  $log6 = _update_code_ver();
+  $html = $log6;
+
+  return $html;
+}
+
+function _update_code_ver() {
+  $log = "";
+  
+  $org_nodes = array();
+
+  $query = "SELECT nid, field_organization_nid FROM content_field_organization";
+
+  if(is_int((int)arg(2))) {
+    $query .= " WHERE field_organization_nid = ".arg(2);
+  }
+
+  //print $query;
+  $res = db_query($query);
+  while($row = db_fetch_object($res)) {
+    $log .= "<br/>";
+    if(!$org_nodes[$row->field_organization_nid]) {
+      $org_nodes[$row->field_organization_nid] = array();
+    }
+
+    $log .= "NID: {$row->nid} -- ORG: {$row->field_organization_nid}";
+    $org_nodes[$row->field_organization_nid][] = $row->nid;
+  }
+
+  //print "<pre>";print_r($org_nodes);print "</pre>";
+
+  foreach($org_nodes as $org_nid=>$t1) {
+    //$t1 = $org_nodes[$org_nid];
+    //$t2 = implode(",",$org_nodes[$org_nid]);
+
+    //print_r($t1);
+    for($i = 0;$i < count($t1);$i++) {
+
+      $inc = 0;
+      $q2 = "DELETE FROM content_field_other_ver WHERE nid = ".$t1[$i];
+      db_query($q2);
+
+      for($j = 0;$j < count($t1);$j++) {
+        if($i != $j) {
+	
+	  //print "<br/>".$j;
+          $q1 = "INSERT INTO content_field_other_ver (vid,nid,delta,field_other_ver_nid) VALUES(".$t1[$i].",".$t1[$i].",".$inc.",".$t1[$j].")";
+	  //print "<br/>".$q1;
+      	  db_query($q1);
+
+	  $inc++;
+	}   
+      }
+    }
+  }
+
+  return $log;
+}
+
+function _update_code_node_title() {
+  $log = "";
+  $query = "SELECT nid,title FROM node LIMIT 2500,500";
+  $res = db_query($query);
+  while($row = db_fetch_object($res)) {
+    //print $row->title."<br/>";
+    $new_title = str_replace("&lt;!-- InstanceBeginEditable name=&quot;organization&quot; --&gt;", "", $row->title);
+    $new_title = str_replace("&lt;!-- InstanceEndEditable --&gt;", "", $new_title);
+    $q1 = "UPDATE node set title = '%s' WHERE nid = %d";
+    //print $q1." - ".$new_title;
+    db_query($q1, $new_title, $row->nid);
+
+    $log .= "<br/>".$row->title;
+  }
+
+  return $log;
+}
+
+function _update_code_node_markup() {
+  $log = "";
+  $query = "SELECT * FROM content_type_ethics_code c";
+  $res = db_query($query);
+  
+  while($row = db_fetch_object($res)) {
+    $log .= "<br/>NID: ".$row->nid;  
+    
+    $nid = $row->nid;
+    $contents = str_replace("&amp;", "&", $row->field_contents_value);
+    $disclaimer = str_replace("&amp;", "&", $row->field_disclaimer_value);
+    $code_desc = str_replace("&amp;", "&", $row->field_code_description_value);
+    
+    //$log .= "{$row->field_contents_value} <hr> {$disclaimer} <hr> {$code_desc} <hr> {$contents}";
+    
+    $q1 = "UPDATE content_type_ethics_code SET field_disclaimer_value = '%s', field_code_description_value = '%s', field_contents_value = '%s', field_disclaimer_format = %d, field_code_description_format = %d, field_contents_format = %d WHERE nid = %d";
+    db_query($q1, $disclaimer, $code_desc, $contents, 2, 2, 2, $nid);
+  }
+  
+  return $log;
+}
+
+function _update_code_nodes() {
+  $log = "";
+  $query = "SELECT * FROM content_type_ethics_code c WHERE nid > 4981";
+  $res = db_query($query);
+  
+  $count = 0;
+  while($row = db_fetch_object($res)) {
+    $code_id = $row->field_code_id_value;
+    
+    $log .= "<br/> Code ID: {$code_id} ";
+    
+    if($code_id) {
+    
+    	$log .= " -- UPDATE";
+    
+    	$q1 = "SELECT id,sourceURL, organizationURL, disclaimer, codeDescription, contents FROM csep_test.code_contents WHERE id = %d";
+    	$res1 = db_query($q1,$code_id);
+    	$r1 = db_fetch_object($res1);
+    	
+    	//print "<pre>";print_r($r1);print "</pre>";
+    	
+    	$surl = $r1->sourceURL;
+    	$ourl = $r1->organizationURL;
+    	$disclaimer = $r1->disclaimer;
+    	$codeDes = $r1->codeDescription;
+    	$contents = $r1->contents;
+    	
+    	$q2 = "UPDATE content_type_ethics_code SET field_source_url_value = '%s', field_org_url_value = '%s', field_disclaimer_value = '%s', field_code_description_value = '%s', field_contents_value = '%s' WHERE field_code_id_value = '%s'";    	
+    	//$log .= " -- ".$q2;
+    	db_query($q2,$surl,$ourl,$disclaimer,$codeDes,$contents,$code_id);
+    	
+    	$count++;
+    }
+  }
+  
+  $log .= "Total updated: {$count}";
+  return $log;
+}
+
+function _create_unassigned_codes() {
+  global $user;
+
+  $log = ""; $node_type = "ethics_code";
+  
+  $sample_node = node_load(2);
+  $sample_node->nid = "";
+  $sample_node->body = "";
+  $sample_node->teaser = "";
+  
+  //print "<pre>";print_r($sample_node); print "</pre>";
+  
+  //Fetch all individual codes, not deleted  
+  $query = "SELECT cc.id,cc.organization,cc.source,cc.dateApproved,cc.otherVersions from csep_test.code_contents cc LIMIT 1306,700";
+  $res = db_query($query);
+  
+  $count = 0;
+  while($row = db_fetch_object($res)) {
+  	$title = trim($row->organization);
+  	
+  	$log .= "<br/>TITLE: ".$title." -- CODE ID: ".$row->id;
+  	
+  	if(!_is_code_imported($row->id) && $title) {
+  		$count++;
+  		
+  		$association_name = $row->organization;
+  		$association_nid = _get_association_nid(strtolower($association_name));
+  		
+  		$log .= "ANAME: ".$association_name." - ANID: ".$association_nid;
+  		
+  		$sample_node->title = $title;  		
+  		$sample_node->field_organization[0]["nid"] = $association_nid; 
+  		$sample_node->field_code_id[0]["value"] = $row->id;
+		$sample_node->field_date_approved[0]["value"] = filter_xss($row->dateApproved,array());
+		$sample_node->field_other_versions[0]["value"] = filter_xss($row->otherVersions,array());
+  		$sample_node->field_source[0]["value"] = $row->source;
+  
+  		
+  		//Save the node.
+  		_node_save_revision($sample_node, $user->uid);
+		drupal_write_record('node', $sample_node);
+		db_query('UPDATE {node_revisions} SET nid = %d WHERE vid = %d', $sample_node->nid, $sample_node->vid);
+		
+		_assign_association_nid($sample_node, $association_nid);
+		_assign_code_attributes($sample_node);
+    		
+  	}
+  }
+  
+  //print "<pre>";print_r($sample_node);print "</pre>";
+  $log .= "<br/> New nodes created: ".$count;
+  return $log;
+}
+
+function _is_code_imported($code_id) {
+  $flag = false;
+  
+  $query = "SELECT nid FROM content_type_ethics_code WHERE field_code_id_value = %d";
+  $res = db_query($query,$code_id);
+  while($row = db_fetch_object($res)) {
+  	$flag = true;
+  }
+  
+  return $flag;
+}
+
+function _create_individual_code_nodes() {
+  global $user;
+
+  $log = ""; $node_type = "ethics_code";
+  
+  $sample_node = node_load(2);
+  $sample_node->nid = "";
+  $sample_node->body = "";
+  $sample_node->teaser = "";
+  
+  //print "<pre>";print_r($sample_node); print "</pre>";
+  
+  //Fetch all individual codes, not deleted  
+  $query = "SELECT cc.id,c.area_desc,c.assoc_desc,c.paper_desc,cc.organization,cc.source,cc.dateApproved,cc.otherVersions from csep_test.code_contents cc INNER JOIN csep_test.codes c ON cc.id = c.codeId order by c.area_desc asc LIMIT 1602,400";
+  $res = db_query($query);
+  
+  $count = 0;
+  while($row = db_fetch_object($res)) {
+  	$title = trim($row->paper_desc)?$row->paper_desc:$row->assoc_desc;
+  	
+  	$log .= "<br/>TITLE: ".$title." -- PAPER: ".$row->paper_desc." -- ".does_node_exist(strtolower($title), $node_type)." ";
+  	
+  	if(!does_node_exist(strtolower($title), $node_type) || !trim($row->paper_desc)) {
+  		$count++;
+  		
+  		$category_name = $row->area_desc;
+  		//$category_tid = _get_category_tid(strtolower($category_name));
+  		
+  		$association_name = $row->assoc_desc;
+  		$association_nid = _get_association_nid(strtolower($association_name));
+  		
+  		$log .= "CNAME: ".$category_name." -- ANAME: ".$association_name." - ANID: ".$association_nid;
+  		
+  		$sample_node->title = $title;  		
+  		$sample_node->field_organization[0]["nid"] = $association_nid; 
+  		$sample_node->field_code_id[0]["value"] = $row->id;
+		$sample_node->field_date_approved[0]["value"] = filter_xss($row->dateApproved,array());
+		$sample_node->field_other_versions[0]["value"] = filter_xss($row->otherVersions,array());
+  		$sample_node->field_source[0]["value"] = $row->source;
+  
+  		if($association_nid) {
+  			//Save the node.
+  			_node_save_revision($sample_node, $user->uid);
+			drupal_write_record('node', $sample_node);
+			db_query('UPDATE {node_revisions} SET nid = %d WHERE vid = %d', $sample_node->nid, $sample_node->vid);
+		
+			_assign_association_nid($sample_node, $association_nid);
+			_assign_code_attributes($sample_node);
+    		}
+  	}
+  }
+  
+  //print "<pre>";print_r($sample_node);print "</pre>";
+  $log .= "<br/> New nodes created: ".$count;
+  return $log;
+}
+
+function _assign_code_attributes($node) {
+  $query = "INSERT INTO content_type_ethics_code(vid,nid,field_code_id_value,field_source_value,field_date_approved_value,field_other_versions_value) VALUES(%d,%d,'%s','%s','%s','%s')";
+  db_query($query,$node->vid, $node->nid, $node->field_code_id[0]["value"], $node->field_source[0]["value"], $node->field_date_approved[0]["value"], $node->field_other_versions[0]["value"]);
+}
+
+function _get_association_nid($association_name) {
+  $nid = 0;
+  
+  if(trim($association_name)) {
+  	$query = "SELECT nid FROM node WHERE LOWER(title) = '%s'";
+  	$res = db_query($query, $association_name);
+  	while($row = db_fetch_object($res)) {
+  		$nid = $row->nid;
+  	}
+  }
+  
+  return $nid;
+}
+
+function _create_organization_node() {
+  global $user;
+  
+  $log = "";
+  
+  $sample_node = node_load(1); //Nid: 1 is the node that was create from the drupal interface.
+  $sample_node->nid = ""; //Unset node id so that new node will be created.
+  
+  //print "<pre>";print_r($sample_node); print "</pre>"; die();
+  
+  //Fetch all organizations
+  $query = "SELECT id,title FROM csep_test.codes_association_1 ORDER BY id ASC";
+  $res = db_query($query);
+  
+  $count = 0;
+  while($row = db_fetch_object($res)) {
+    $title = $row->title;
+    $body = "";
+    
+    $log .= "<br/>".$title." -- ".does_node_exist(strtolower($title));
+    if(!does_node_exist(strtolower($title, "organization"))) {
+    
+    	$count++;
+    
+  	$category_id = _csep_test_association_get_category_id($row->id);
+  	$category_name = _csep_test_get_category_name($category_id);
+  	$category_tid = _get_category_tid(strtolower($category_name));
+  	
+  	$log .= "CID: ".$category_id." -- CNAME: ".$category_name." -- CTID: ".$category_tid;
+  	
+  	$sample_node->title = $title;
+  	$sample_node->body = $body;
+  	
+  	foreach($sample_node->taxonomy as $tobj) { //get the first taxonomy object.
+  		break;	
+  	}
+  	$sample_node->taxonomy = array();
+  	$tobj->tid = $category_tid;
+  	$tobj->name = $category_name;
+  	$sample_node->taxonomy[$category_tid] = $tobj;
+  
+   	_node_save_revision($sample_node, $user->uid);
+	drupal_write_record('node', $sample_node);
+    	db_query('UPDATE {node_revisions} SET nid = %d WHERE vid = %d', $sample_node->nid, $sample_node->vid);
+    	
+    	_assign_term_node($sample_node, $category_tid);
+    	_assign_old_association_id($sample_node, $row->id);
+  	//node_save($sample_node);
+    }// if node doesn't already exist
+  }
+  
+  $log .= "<br/> New nodes created: ".$count;
+  return $log;
+}
+
+function _assign_old_association_id($node, $aid) {
+  $query = "INSERT INTO content_type_organization(vid, nid, field_assoc_id_value) VALUES(%d,%d,%d)";
+  $res = db_query($query, $node->vid, $node->nid, $aid);  
+}
+
+/**
+ * $aid - association nid.
+ */
+function _assign_association_nid($node, $aid) {
+  $flag = false;
+  
+  $q1 = "SELECT * FROM content_field_organization WHERE nid = %d AND field_organization_nid = %d";
+  $res1 = db_query($q1);
+  while($row1 = db_fetch_object($res1)) {
+  	$flag = true;
+  }
+  
+  if(!$flag) {
+  	$query = "INSERT INTO content_field_organization(vid,nid,delta,field_organization_nid) VALUES(%d,%d,%d,%d)";
+  	$res = db_query($query, $node->vid,$node->nid,0,$aid);
+  }
+}
+
+function _assign_term_node($node, $tid) {
+  $flag = false;
+  
+  $q1 = "SELECT * FROM term_node WHERE nid = %d AND tid = %d";
+  $res1 = db_query($q1);
+  while($row1 = db_fetch_object($res1)) {
+  	$flag = true;
+  }
+  
+  //Insert only if the node and term is not associated.
+  if(!$flag) {
+  	$query = "INSERT INTO term_node(nid,vid,tid) VALUES(%d,%d,%d)";
+  	$res = db_query($query, $node->nid,$node->vid,$tid);
+  }  
+}
+
+function does_node_exist($title, $type = "") {
+  $query = "SELECT nid FROM node WHERE LOWER(title) = '%s'";
+  if(trim($type)) {
+  	$query .= " AND type = '%s'";
+  } else {
+  	$query .= " %s";
+  }
+  
+  //print $query;
+  $res = db_query($query,$title, $type);
+  while($row = db_fetch_object($res)) {
+  	return $row->nid;
+  }
+  return false;
+}
+
+/**
+ *
+ */
+function _csep_test_association_get_category_id($association_id) {
+  $query = "SELECT * FROM csep_test.codes_cat_assoc WHERE association_id = %d";
+  $res = db_query($query,$association_id);
+  while($row = db_fetch_object($res)) {
+  	return $row->category_id;
+  }
+  return 0;
+}
+
+function _csep_test_get_category_name($category_id) {
+  $query = "SELECT * FROM csep_test.codes_category_1 WHERE id = %d";
+  $res = db_query($query,$category_id);
+  while($row = db_fetch_object($res)) {
+  	return $row->description;
+  }
+  return "";
+}
+
+/**
+ * Returns taxonomy id of the $category_name.
+ */
+function _get_category_tid($category_name) {
+  $query = "SELECT * FROM {ethics_codes.term_data} WHERE LOWER(name) = '%s'";
+  //print $query;
+  $res = db_query($query,$category_name);
+  if($row = db_fetch_object($res)) {  
+    //print $row->tid;
+    return $row->tid;
+  }
+  return 0;
+}

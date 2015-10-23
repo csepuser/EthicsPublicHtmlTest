@@ -1,0 +1,13 @@
+; $Id: image_cycle.info,v 1.2 2008/12/29 22:36:42 boombatower Exp $
+name = "Image Cycle"
+description = "Create an image slideshow from images in a gallery using the jQuery Cycle plugin."
+package = "Image"
+dependencies[] = image_gallery
+dependencies[] = jquery_update
+core = 6.x
+; Information added by drupal.org packaging script on 2009-05-01
+version = "6.x-1.1"
+core = "6.x"
+project = "image_cycle"
+datestamp = "1241147455"
+

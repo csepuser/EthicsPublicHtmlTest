@@ -1,0 +1,244 @@
+<?php
+// $Id: image_cycle.module,v 1.4 2009/05/01 03:00:32 boombatower Exp $
+/**
+ * @file
+ * Create an image slideshow from images in a gallery using the jQuery Cycle plugin.
+ *
+ * Copyright 2008 by Jimmy Berry ("boombatower", http://drupal.org/user/214218)
+ */
+
+/**
+ * Implementation of hook_menu().
+ */
+function image_cycle_menu() {
+  $items = array();
+
+  $items['image_cycle/%'] = array(
+    'title' => 'Image slideshow',
+    'page callback' => 'image_cycle_show',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function image_cycle_theme() {
+  return array(
+    'image_cycle_cycle' => array(
+      'arguments' => array(
+        'images' => NULL,
+        'effect' => 'fade',
+        'parameters' => array(),
+      ),
+    ),
+  );
+};
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function image_cycle_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'image_gallery_admin_form') {
+    $form['#submit'][] = 'image_cycle_gallery_submit';
+    $form['image_cycle'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Cycle settings'),
+      '#description' => t('The JQuery Cycle effect to use when displaying slideshow with the Image slideshow module. ' .
+                           '(<a href="http://malsup.com/jquery/cycle/">effects preview</a>)'),
+      '#tree' => TRUE
+    );
+    if ($form['tid']['#value']) {
+      $form['image_cycle']['view'] = array(
+        '#type' => 'item',
+        '#title' => t('View'),
+        '#value' => l('image_cycle/' . $form['tid']['#value'], 'image_cycle/' . $form['tid']['#value'])
+      );
+    }
+    $form['image_cycle']['effect'] = array(
+      '#type' => 'select',
+      '#title' => t('Effect'),
+      '#description' => t('Please note that the available effects will depend on which version of the jQuery Cycle Plugin ' .
+                          'is installed.'),
+      '#options' => array(
+        'blindX',
+        'blindY',
+        'blindZ',
+        'cover',
+        'curtainX',
+        'curtainY',
+        'fade',
+        'fadeZoom',
+        'growX',
+        'growY',
+        'scrollUp',
+        'scrollDown',
+        'scrollLeft',
+        'scrollRight',
+        'scrollHorz',
+        'scrollVert',
+        'shuffle',
+        'slideX',
+        'slideY',
+        'toss',
+        'turnUp',
+        'turnDown',
+        'turnLeft',
+        'turnRight',
+        'uncover',
+        'wipe',
+        'zoom',
+      ),
+      '#default_value' => variable_get('image_cycle_effect_' . $form['vid']['#value'], 'fade')
+    );
+    $form['image_cycle']['effect']['#options'] = drupal_map_assoc($form['image_cycle']['effect']['#options']);
+    $form['image_cycle']['parameters'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Parameters'),
+      '#description' => t('Custom parameters to pass with the effect. Place each parameter on a line in the format KEY:VALUE. ' .
+                          'Leave blank for default effect settings. ' .
+                          'See the <a href="@reference">jQuery Cycle Plugin - Option Reference</a> for a list options and an ' .
+                          'explaination of what they do.',
+                          array('@reference' => 'http://malsup.com/jquery/cycle/options.html')),
+      '#default_value' => '',
+    );
+
+    // Implode paramters.
+    $parameters = variable_get('image_cycle_parameters_' . $form['vid']['#value'], array());
+    foreach ($parameters as $key => $value) {
+      $form['image_cycle']['parameters']['#default_value'] .= "$key: $value\n";
+    }
+
+    $form['image_cycle']['css'] = array(
+      '#type' => 'textarea',
+      '#title' => t('CSS'),
+      '#description' => t('Custom CSS for the slideshow. The images will be encapsulated by <em>div.image_cycle_pictures</em>.'),
+      '#default_value' => variable_get('image_cycle_css_' . $form['vid']['#value'], '')
+    );
+  }
+}
+
+/**
+ * Submit callback for gallery taxonmy form.
+ */
+function image_cycle_gallery_submit($form, &$form_state) {
+  variable_set('image_cycle_effect_' . $form_state['values']['vid'], $form_state['values']['image_cycle']['effect']);
+
+  // Explode parameters by line and key => value pair.
+  $parameters_input = explode("\n", $form_state['values']['image_cycle']['parameters']);
+  $parameters = array();
+  foreach ($parameters_input as $parameter) {
+    $parts = explode(':', $parameter);
+    if (count($parts) == 2) {
+      $parameters[trim($parts[0])] = trim($parts[1]);
+    }
+  }
+  variable_set('image_cycle_parameters_' . $form_state['values']['vid'], $parameters);
+  variable_set('image_cycle_css_' . $form_state['values']['vid'], $form_state['values']['image_cycle']['css']);
+}
+
+/**
+ * Display a slideshow for the specified term ID.
+ *
+ * @param interger $tid Term ID.
+ * @return string HTML output.
+ */
+function image_cycle_show($tid) {
+  $term = taxonomy_get_term($tid);
+  $images = image_cycle_get_images($tid);
+
+  $effect = variable_get('image_cycle_effect_' . $term->vid, 'fade');
+  $parameters = variable_get('image_cycle_parameters_' . $term->vid, array());
+  $css = variable_get('image_cycle_css_' . $term->vid, '');
+
+  $out = '';
+  drupal_set_title($term->name);
+  drupal_add_js(drupal_get_path('module', 'image_cycle') . '/jquery.cycle.js');
+  if ($css) {
+    $out .= '<style>' . $css . '</style>';
+  }
+  if ($images) {
+    return $out . theme('image_cycle_cycle', $images, $effect, $parameters);
+  }
+  return t('No images');
+}
+
+/**
+ * Theme an image cycle for a set of images.
+ *
+ * @param array $images Set of images to include in the cycle.
+ * @param string $effect Effect method.
+ * @param array $parameters Associative array of parameters for cycle effect.
+ * @param string $id The HTML id to use for the container. Default: slide-#.
+ * @return string HTML output.
+ */
+function theme_image_cycle_cycle($images, $effect = 'fade', $parameters = array(), $id = NULL) {
+  static $count = 0;
+
+  $parameters['fx'] = "'$effect'";
+
+  // Create JSON output.
+  $json = array();
+  foreach ($parameters as $key => $value) {
+    if (!is_numeric($key)) {
+      $json[] .= "$key: $value";
+    }
+  }
+
+  if (!$id) {
+    $id = "slide-$count";
+  }
+
+  drupal_add_js("$('#$id').cycle({" . implode(', ', $json) . "});", 'inline', 'footer');
+  $out = '<div id="' . $id . '" class="image_cycle_pictures">';
+  foreach ($images as $image) {
+    $out .= image_display($image);
+  }
+  $out .= '</div>';
+  $count++;
+  return $out;
+}
+
+/**
+ * Get the set of images in the specified term ID. Copied from
+ * image_gallery.module:image_gallery_page().
+ *
+ * @param integer $tid Term Id.
+ * @return array List of node objects contained by term ID that contain images.
+ */
+function image_cycle_get_images($tid) {
+  // Allow images to be sorted in a useful order.
+  $query = "SELECT n.nid FROM {term_node} t INNER JOIN {node} n ON t.nid = n.nid WHERE n.status = 1 AND n.type = 'image' AND t.tid = %d ";
+  $count_query = "SELECT COUNT(DISTINCT(n.nid)) FROM {term_node} t INNER JOIN {node} n ON t.nid = n.nid WHERE n.status = 1 AND n.type = 'image' AND t.tid = %d ";
+  $args = array($tid);
+  switch (variable_get('image_gallery_sort_order', IMAGE_GALLERY_SORT_CREATE_DESC)) {
+    case IMAGE_GALLERY_SORT_CREATE_DESC:
+      $query .= 'ORDER BY n.sticky DESC, n.created DESC';
+      break;
+
+    case IMAGE_GALLERY_SORT_CREATE_ASC:
+      $query .= 'ORDER BY n.sticky DESC, n.created ASC';
+      break;
+
+    case IMAGE_GALLERY_SORT_FILENAME:
+      $query = "SELECT n.nid FROM {term_node} t INNER JOIN {node} n ON t.nid = n.nid
+        INNER JOIN {image} i ON n.nid = i.nid INNER JOIN {files} f ON i.fid = f.fid
+        WHERE n.status = 1 AND n.type = 'image' AND t.tid = %d AND f.filename = '%s'
+        ORDER BY n.sticky DESC, f.filepath";
+      $args[] = IMAGE_ORIGINAL;
+      break;
+
+    case IMAGE_GALLERY_SORT_TITLE:
+      $query .= 'ORDER BY n.sticky DESC, n.title ASC';
+      break;
+  }
+  $result = pager_query(db_rewrite_sql($query), variable_get('image_images_per_page', 6), 0, db_rewrite_sql($count_query), $args);
+  while ($node = db_fetch_object($result)) {
+    $images[] = node_load(array('nid' => $node->nid));
+  }
+  return $images;
+}

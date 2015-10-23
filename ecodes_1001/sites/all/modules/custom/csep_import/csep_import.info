@@ -1,0 +1,10 @@
+name = CSEP Import
+description = "Import content from CSEP database."
+package = Custom
+core = 6.x
+
+; Information added by drupal.org packaging script on 2011-06-16
+version = "6.x-1.0"
+core = "6.x"
+project = "csep_import"
+datestamp = "1308238014"
